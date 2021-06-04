@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .. import constants 
-from .. import gamelib
 
 class ActionTypeHead(nn.Module):
     def __init__(self):
