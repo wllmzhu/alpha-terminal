@@ -17,20 +17,18 @@ class FeatureEncoder(nn.Module):
         return torch.cat((latent_spatial, latent_scalar), -1) 
 
 class PolicyNet(nn.Module): 
-    # FIXME: variable length lstm which is different from AlphaStar
     def __init__(self):
         super().__init__()
         self.lstm = nn.LSTMCell(input_size=256, hidden_size=256)
         self.action_type_head = ActionTypeHead()
         self.location_head = LocationHead()
     
-    def forward(self, observation_feature, hidden=None):
-        # TODO: handle hidden_state = None
+    def forward(self, observation_feature, game_state, hidden=None):
         if hidden == None:
             hidden = self.init_hidden_state()
         lstm_out, hidden = self.lstm(observation_feature, hidden)
-        action_type = self.action_type_head(lstm_out)
-        location = self.location_head(lstm_out, action_type)
+        action_type = self.action_type_head(lstm_out, game_state)
+        location = self.location_head(lstm_out, game_state, action_type)
         return action_type, location
     
     def init_hidden_state(self, batch_size=1):

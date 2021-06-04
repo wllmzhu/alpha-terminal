@@ -78,7 +78,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         observation_features = self.feature_encoder(spatial_features, scalar_features)
         action_type = None
         while action_type != 0:
-            action_type, location = self.policy(observation_features)
+            action_type, location = self.policy(observation_features, game_state)
             # gamelib.debug_write(action_type, location)
             if action_type in [1, 2, 3, 4, 5, 6]:
                 game_state.attempt_spawn(constants.ALL_ACTIONS[action_type], [location])
