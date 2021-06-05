@@ -23,13 +23,11 @@ class PolicyNet(nn.Module):
         self.action_type_head = ActionTypeHead()
         self.location_head = LocationHead()
     
-    def forward(self, observation_feature, game_state, hidden=None):
-        if hidden == None:
-            hidden = self.init_hidden_state()
-        lstm_out, hidden = self.lstm(observation_feature, hidden)
-        action_type = self.action_type_head(lstm_out, game_state)
-        location = self.location_head(lstm_out, game_state, action_type)
-        return action_type, location
+    def forward(self, observation_feature, game_state, hidden_and_cell_states):
+        hidden_state, cell_state = self.lstm(observation_feature, hidden_and_cell_states)
+        action_type = self.action_type_head(hidden_state, game_state)
+        location = self.location_head(hidden_state, game_state, action_type)
+        return action_type, location, (hidden_state, cell_state)
     
     def init_hidden_state(self, batch_size=1):
         device = next(self.parameters()).device
