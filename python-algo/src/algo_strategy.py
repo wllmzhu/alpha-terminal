@@ -2,6 +2,7 @@ import random
 from sys import maxsize
 from copy import deepcopy
 
+import numpy as np
 import torch
 from torch.optim import Adam
 
@@ -77,19 +78,18 @@ class AlgoStrategy(gamelib.AlgoCore):
         game_state.suppress_warnings(True)  #Comment or remove this line to enable warnings.
 
         self.policy_net_strategy(game_state)
-        
-        if self.is_learning:
-            reward = self.calculate_reward(game_state)
-            gamelib.debug_write('Reward', reward)
-
         game_state.submit_turn()
 
     def policy_net_strategy(self, game_state):
+        if self.is_learning:
+            action_type_logps, location_logps = [], []
+
         spatial_features, scalar_features = self.game_state_to_features(game_state)
         observation_features = self.feature_encoder(spatial_features, scalar_features)
         action_type = None
         while action_type != 0:
-            action_type, location, self.memory_state = self.policy(observation_features, game_state, self.memory_state)
+            action_type, _, action_type_logp, location, _, location_logp, self.memory_state \
+                = self.policy(observation_features, game_state, self.memory_state)
             # gamelib.debug_write(action_type, location)
             if action_type in [1, 2, 3, 4, 5, 6]:
                 game_state.attempt_spawn(constants.ALL_ACTIONS[action_type], [location])
@@ -97,6 +97,16 @@ class AlgoStrategy(gamelib.AlgoCore):
                 game_state.attempt_upgrade([location])
             elif action_type == 8:
                 game_state.attempt_remove([location])
+            
+            if self.is_learning:
+                action_type_logps.append(action_type_logp)
+                location_logps.append(location_logp)
+        
+        if self.is_learning:
+            reward_prev_turn = self.compute_reward(game_state)
+            self.ep_rews.append(reward_prev_turn)
+            self.ep_action_type_logps.append(action_type_logps) 
+            self.ep_location_logps.append(location_logps)
 
     def game_state_to_features(self, game_state):
         # spatial features
@@ -131,16 +141,67 @@ class AlgoStrategy(gamelib.AlgoCore):
 
     def on_game_end(self):
         if self.is_learning:
-            # TODO: reinforce
-            pass
+            self.action_lengths = [len(logps) for logps in self.ep_action_type_logps]
+            self.print_statistics()
+            self.optimizer.zero_grad()
+            episode_loss = self.compute_loss()
+            episode_loss.backward()
+            self.optimizer.step()
+
+            # TODO: save model and optimizer state_dict for another day
     
     def setup_vanila_policy_gradient(self):
         params = list(self.feature_encoder.parameters()) + list(self.policy.parameters())
+        # TODO: load state_dict from disk if possible to continue training
         self.optimizer = Adam(params, lr=self.lr)
         self.my_health = self.enemy_health = self.config['resources']['startingHP']
 
-    def calculate_reward(self, game_state):
+        self.ep_action_type_logps = []
+        self.ep_location_logps = []
+        self.ep_rews = []
+
+    def compute_reward(self, game_state):
         reward = game_state.my_health - self.my_health
         reward += self.enemy_health - game_state.enemy_health
         self.my_health, self.enemy_health = game_state.my_health, game_state.enemy_health
         return reward
+
+    def compute_loss(self):
+        # TODO: check if need to shift rewards by 1
+        ep_weights = list(self.reward_to_go())
+        batch_weights = []
+        for action_len, weight in zip(self.action_lengths, ep_weights):
+            batch_weights.extend([weight] * action_len)
+        batch_action_type_logps = [logp for logps in self.ep_action_type_logps for logp in logps]
+        batch_location_logps = [logp for logps in self.ep_location_logps for logp in logps]
+        
+        batch_weights = torch.tensor(batch_weights, dtype=torch.float32)
+        batch_action_type_logps = torch.cat(batch_action_type_logps)
+        batch_location_logps = torch.cat(batch_location_logps)
+
+        action_type_loss = -(batch_action_type_logps * batch_weights).mean()
+        location_loss = -(batch_location_logps * batch_weights).mean() 
+        
+        return action_type_loss + location_loss
+
+    def reward_to_go(self):
+        n = len(self.ep_rews)
+        rtgs = np.zeros_like(self.ep_rews)
+        for i in reversed(range(n)):
+            rtgs[i] = self.ep_rews[i] + (rtgs[i+1] if i+1 < n else 0)
+        return rtgs
+
+    def print_statistics(self):
+        # reward and return
+        gamelib.debug_write('EPISODE LENGTH', len(self.ep_rews))
+        gamelib.debug_write('EPISODE RETURN', sum(self.ep_rews))
+        gamelib.debug_write('REWARD MEAN', np.mean(self.ep_rews))
+        gamelib.debug_write('REWARD STD', np.std(self.ep_rews))
+        gamelib.debug_write('REWARD MAX', max(self.ep_rews))
+        gamelib.debug_write('REWARD MIN', min(self.ep_rews))
+
+        # actions
+        gamelib.debug_write('ACTION LEN MEAN', np.mean(self.action_lengths))
+        gamelib.debug_write('ACTION LEN STD', np.std(self.action_lengths))
+        gamelib.debug_write('ACTION LEN MAX', max(self.action_lengths))
+        gamelib.debug_write('ACTION LEN MIN', min(self.action_lengths)) 

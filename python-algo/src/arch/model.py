@@ -27,7 +27,9 @@ class PolicyNet(nn.Module):
         hidden_state, cell_state = self.lstm(observation_feature, hidden_and_cell_states)
         action_type, action_type_logits, action_type_logp = self.action_type_head(hidden_state, game_state)
         location, location_logits, location_logp = self.location_head(hidden_state, game_state, action_type)
-        return action_type, location, (hidden_state, cell_state)
+        return action_type, action_type_logits, action_type_logp, \
+            location, location_logits, location_logp, \
+            (hidden_state, cell_state)
     
     def init_hidden_state(self, batch_size=1):
         device = next(self.parameters()).device
