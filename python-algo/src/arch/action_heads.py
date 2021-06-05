@@ -36,6 +36,11 @@ def valid_action_type_mask(game_state):
     # NOOP is always available
     # structure and mobile units must be affordable
     # upgrade and remove are valid if there exists structure
+    
+    # NOTE: gamestate=None for SL
+    if game_state is None:
+        return torch.tensor([True] * 9)
+
     mask = [True] * 9
     # check affordability
     for i_unit in range(1, 7):
@@ -47,11 +52,12 @@ def valid_action_type_mask(game_state):
     return mask
 
 def valid_location_mask(game_state, action_type):
-    if action_type == 0:                # NOOP
+    # NOTE: gamestate=None for SL
+    if game_state is None or action_type == 0:  # SL or NOOP
         mask = [True] * 210
-    elif action_type in range(1, 7):    # structure or mobile
+    elif action_type in range(1, 7):            # structure or mobile
         mask = [game_state.can_spawn(constants.ALL_ACTIONS[action_type], loc) for loc in constants.MY_LOCATIONS]
-    else:                               # remove or upgrade
+    else:                                       # remove or upgrade
         mask = [game_state.contains_stationary_unit(loc) is not False for loc in constants.MY_LOCATIONS]
     mask = torch.tensor(mask)
     return mask
