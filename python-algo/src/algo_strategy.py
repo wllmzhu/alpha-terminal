@@ -3,6 +3,7 @@ from sys import maxsize
 from copy import deepcopy
 
 import torch
+from torch.optim import Adam
 
 from . import gamelib
 from . import constants
@@ -32,6 +33,9 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.device = 'cpu'
         gamelib.debug_write('Using {}'.format(self.device))
 
+        self.is_learning = True
+        self.lr = 0.01
+
     def on_game_start(self, config):
         """ 
         Read in config and perform any initial setup here 
@@ -50,7 +54,12 @@ class AlgoStrategy(gamelib.AlgoCore):
         STRUCTURE_ONEHOT = {WALL: [1, 0, 0], SUPPORT: [0, 1, 0], TURRET: [0, 0, 1]}
         # This is a good place to do initial setup
         self.scored_on_locations = []
+        
+        self.setup_policy_net()
+        if self.is_learning:
+            self.setup_vanila_policy_gradient()
 
+    def setup_policy_net(self):
         self.feature_encoder = FeatureEncoder()
         self.policy = PolicyNet()
         self.memory_state = self.policy.init_hidden_state()
@@ -68,6 +77,11 @@ class AlgoStrategy(gamelib.AlgoCore):
         game_state.suppress_warnings(True)  #Comment or remove this line to enable warnings.
 
         self.policy_net_strategy(game_state)
+        
+        if self.is_learning:
+            reward = self.calculate_reward(game_state)
+            gamelib.debug_write('Reward', reward)
+
         game_state.submit_turn()
 
     def policy_net_strategy(self, game_state):
@@ -112,3 +126,21 @@ class AlgoStrategy(gamelib.AlgoCore):
         scalar_features = torch.unsqueeze(scalar_features, 0)
 
         return spatial_features, scalar_features
+
+    # Methods for reinforcement learning
+
+    def on_game_end(self):
+        if self.is_learning:
+            # TODO: reinforce
+            pass
+    
+    def setup_vanila_policy_gradient(self):
+        params = list(self.feature_encoder.parameters()) + list(self.policy.parameters())
+        self.optimizer = Adam(params, lr=self.lr)
+        self.my_health = self.enemy_health = self.config['resources']['startingHP']
+
+    def calculate_reward(self, game_state):
+        reward = game_state.my_health - self.my_health
+        reward += self.enemy_health - game_state.enemy_health
+        self.my_health, self.enemy_health = game_state.my_health, game_state.enemy_health
+        return reward

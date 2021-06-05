@@ -43,6 +43,12 @@ class AlgoCore(object):
         """
         pass
 
+    def on_game_end(self):
+        """
+        This function is called before the agent process exit.
+        Used for reinforcement learning.
+        """
+        pass
 
     def start(self):
         """ 
@@ -93,3 +99,5 @@ class AlgoCore(object):
                 Something is wrong? Received an incorrect or improperly formatted string.
                 """
                 debug_write("Got unexpected string : {}".format(game_state_string))
+        
+        self.on_game_end()
