@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.distributions.categorical import Categorical
 
 from .. import constants 
 
@@ -12,12 +13,14 @@ class ActionTypeHead(nn.Module):
 
     def forward(self, x, game_state):
         x = F.relu(self.fc1(x))
-        x = self.fc2(x)
+        logits = self.fc2(x)
         mask = valid_action_type_mask(game_state)
-        x = torch.where(mask, x, torch.tensor(-1e+8))
-        probs = F.softmax(x, dim=-1)
-        action_type = torch.multinomial(probs, num_samples=1)
-        return action_type.item()
+        logits = torch.where(mask, logits, torch.tensor(-1e+8))
+        
+        dist = Categorical(logits=logits)
+        action_type = dist.sample()
+        logp = dist.log_prob(action_type)
+        return action_type.item(), logits, logp
 
 class LocationHead(nn.Module):
     def __init__(self):
@@ -25,12 +28,14 @@ class LocationHead(nn.Module):
         self.fc1 = nn.Linear(256, 210)
 
     def forward(self, x, game_state, action_type):
-        x = self.fc1(x)
+        logits = self.fc1(x)
         mask = valid_location_mask(game_state, action_type)
-        x = torch.where(mask, x, torch.tensor(-1e+8))
-        probs = F.softmax(x, dim=-1)
-        location = torch.multinomial(probs, num_samples=1)
-        return constants.MY_LOCATIONS[location.item()]
+        logits = torch.where(mask, logits, torch.tensor(-1e+8))
+        
+        dist = Categorical(logits=logits)
+        location = dist.sample()
+        logp = dist.log_prob(location)
+        return constants.MY_LOCATIONS[location.item()], logits, logp
         
 def valid_action_type_mask(game_state):
     # NOOP is always available

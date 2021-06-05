@@ -25,8 +25,8 @@ class PolicyNet(nn.Module):
     
     def forward(self, observation_feature, game_state, hidden_and_cell_states):
         hidden_state, cell_state = self.lstm(observation_feature, hidden_and_cell_states)
-        action_type = self.action_type_head(hidden_state, game_state)
-        location = self.location_head(hidden_state, game_state, action_type)
+        action_type, action_type_logits, action_type_logp = self.action_type_head(hidden_state, game_state)
+        location, location_logits, location_logp = self.location_head(hidden_state, game_state, action_type)
         return action_type, location, (hidden_state, cell_state)
     
     def init_hidden_state(self, batch_size=1):
@@ -34,12 +34,3 @@ class PolicyNet(nn.Module):
         hidden = (torch.zeros(batch_size, 256).to(device), 
                   torch.zeros(batch_size, 256).to(device))
         return hidden
-            
-if __name__ == '__main__':
-    feature_encoder = FeatureEncoder()
-    policy = PolicyNet()
-
-    spatial_features = torch.rand(1, 7, 28, 28)
-    scalar_features = torch.rand(1, 7)
-    observation_features = feature_encoder(spatial_features, scalar_features)
-    action_type, location = policy(observation_features)
