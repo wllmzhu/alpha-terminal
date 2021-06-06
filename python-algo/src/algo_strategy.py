@@ -44,7 +44,13 @@ class AlgoStrategy(gamelib.AlgoCore):
             gamelib.debug_write("I'm EVIL so I'm not LEARNING! Ignoring is_learning...")
             self.is_learning = False
 
-        self.checkpoint_manager = utils.CheckpointManager(self.is_enemy)
+        self.is_prod = args.is_prod
+        if self.is_prod:
+            gamelib.debug_write("Production mode. Ignoring is_learning, is_enemy...")
+            self.is_learning = False
+            self.is_enemy = False
+
+        self.checkpoint_manager = utils.CheckpointManager(self.is_enemy, self.is_prod)
 
     def on_game_start(self, config):
         """ 
@@ -77,7 +83,8 @@ class AlgoStrategy(gamelib.AlgoCore):
             params = list(self.feature_encoder.parameters()) + list(self.policy.parameters())
             self.optimizer = Adam(params, lr=self.lr)
         
-        if self.checkpoint_manager.model_id:
+        if self.checkpoint_manager.checkpoint_exists():
+            gamelib.debug_write('Loading model weights...')
             feature_encoder_path, policy_path, optimizer_path = self.checkpoint_manager.get_latest_model_path()
             self.feature_encoder.load_state_dict(torch.load(feature_encoder_path))
             self.policy.load_state_dict(torch.load(policy_path))

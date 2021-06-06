@@ -1,28 +1,46 @@
 import os
+from pathlib import Path
 import json
 import torch
 
 from . import gamelib
 
 class CheckpointManager:
-    def __init__(self, is_enemy):
+    def __init__(self, is_enemy, is_prod):
+        self.is_enemy = is_enemy
+        self.is_prod = is_prod
+
         self.checkpoint_path = self.get_checkpoint_path()
         if not os.path.exists(self.checkpoint_path):
             os.mkdir(self.checkpoint_path)
-        self.is_enemy = is_enemy
-        # NOTE: enemy model gets a different id
-        self.model_id = self.get_latest_model_id()
-        self.next_id = self.get_next_model_id()
+        
+        if not self.is_prod:
+            self.model_id = self.get_latest_model_id()
+            self.next_id = self.get_next_model_id()
+            gamelib.debug_write('MODEL ID', self.checkpoint_manager.model_id)
 
     def get_checkpoint_path(self):
         file_dir = os.path.dirname(os.path.realpath(__file__))
-        grandparent_dir = os.path.join(file_dir, os.pardir, os.pardir)
-        grandparent_dir = os.path.abspath(grandparent_dir)
-        return os.path.join(grandparent_dir, 'model')
+        if self.is_prod:
+            parent_dir = os.path.join(file_dir, os.pardir)
+            parent_dir = os.path.abspath(parent_dir)
+            return os.path.join(parent_dir, 'weights')
+        else:
+            grandparent_dir = os.path.join(file_dir, os.pardir, os.pardir)
+            grandparent_dir = os.path.abspath(grandparent_dir)
+            return os.path.join(grandparent_dir, 'model')
+    
+    def checkpoint_exists(self):
+        if not self.is_prod:
+            return self.model_id is not None
+        else:
+            policy_path = os.path.join(self.get_checkpoint_path(), 'policy.pth')
+            return Path(policy_path).exists()
 
     def save_model(self, feature_encoder, policy_net, optimizer):
-        if self.is_enemy:
-            gamelib.debug_write("Enemy can't save model. Skipping...")
+        if self.is_enemy or self.is_prod:
+            gamelib.debug_write("Enemy/Production can't save model. Skipping...")
+            return
         model_path = os.path.join(self.checkpoint_path, str(self.next_id))
         os.mkdir(model_path)
         feature_encoder_path = os.path.join(model_path, 'feature.pth')
@@ -52,10 +70,13 @@ class CheckpointManager:
         return 0 if self.model_id is None else self.model_id + 1
 
     def get_latest_model_path(self):
-        if self.model_id is None:
-            return None
-        model_id = str(self.model_id)
-        feature_encoder_name = os.path.join(self.checkpoint_path, model_id, 'feature.pth')
-        policy_name = os.path.join(self.checkpoint_path, model_id, 'policy.pth')
-        optimizer_name = os.path.join(self.checkpoint_path, model_id, 'optimizer.pth')
-        return feature_encoder_name, policy_name, optimizer_name
+        if self.is_prod:
+            feature_encoder_name = os.path.join(self.checkpoint_path, 'feature.pth')
+            policy_name = os.path.join(self.checkpoint_path, 'policy.pth')
+            return feature_encoder_name, policy_name, ''
+        else:
+            model_id = str(self.model_id)
+            feature_encoder_name = os.path.join(self.checkpoint_path, model_id, 'feature.pth')
+            policy_name = os.path.join(self.checkpoint_path, model_id, 'policy.pth')
+            optimizer_name = os.path.join(self.checkpoint_path, model_id, 'optimizer.pth')
+            return feature_encoder_name, policy_name, optimizer_name
