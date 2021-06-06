@@ -4,10 +4,12 @@ import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 
 from .. import constants 
+from .. import gamelib
 
 class ActionTypeHead(nn.Module):
-    def __init__(self):
+    def __init__(self, device):
         super().__init__()
+        self.device = device
         self.fc1 = nn.Linear(256, 64)
         self.fc2 = nn.Linear(64, 9)
 
@@ -15,7 +17,7 @@ class ActionTypeHead(nn.Module):
         x = F.relu(self.fc1(x))
         logits = self.fc2(x)
         mask = valid_action_type_mask(game_state)
-        logits = torch.where(mask, logits, torch.tensor(-1e+8))
+        logits = torch.where(mask.to(self.device), logits, torch.tensor(-1e+8).to(self.device))
         
         dist = Categorical(logits=logits)
         action_type = dist.sample()
@@ -23,14 +25,15 @@ class ActionTypeHead(nn.Module):
         return action_type.item(), logits, logp
 
 class LocationHead(nn.Module):
-    def __init__(self):
+    def __init__(self, device):
         super().__init__()
+        self.device = device
         self.fc1 = nn.Linear(256, 210)
 
     def forward(self, x, game_state, action_type):
         logits = self.fc1(x)
         mask = valid_location_mask(game_state, action_type)
-        logits = torch.where(mask, logits, torch.tensor(-1e+8))
+        logits = torch.where(mask.to(self.device), logits, torch.tensor(-1e+8).to(self.device))
         
         dist = Categorical(logits=logits)
         location = dist.sample()

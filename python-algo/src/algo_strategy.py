@@ -30,7 +30,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         random.seed(seed)
         gamelib.debug_write('Random seed: {}'.format(seed))
 
-        # TODO: gpu support
         self.device = 'cpu'
         gamelib.debug_write('Using {}'.format(self.device))
 
@@ -61,8 +60,8 @@ class AlgoStrategy(gamelib.AlgoCore):
             self.setup_vanila_policy_gradient()
 
     def setup_policy_net(self):
-        self.feature_encoder = FeatureEncoder()
-        self.policy = PolicyNet()
+        self.feature_encoder = FeatureEncoder().to(self.device)
+        self.policy = PolicyNet(self.device).to(self.device)
         self.memory_state = self.policy.init_hidden_state()
 
     def on_turn(self, turn_state):
@@ -175,7 +174,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         batch_action_type_logps = [logp for logps in self.ep_action_type_logps for logp in logps]
         batch_location_logps = [logp for logps in self.ep_location_logps for logp in logps]
         
-        batch_weights = torch.tensor(batch_weights, dtype=torch.float32)
+        batch_weights = torch.tensor(batch_weights, dtype=torch.float32).to(self.device)
         batch_action_type_logps = torch.cat(batch_action_type_logps)
         batch_location_logps = torch.cat(batch_location_logps)
 

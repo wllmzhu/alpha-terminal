@@ -17,11 +17,12 @@ class FeatureEncoder(nn.Module):
         return torch.cat((latent_spatial, latent_scalar), -1) 
 
 class PolicyNet(nn.Module): 
-    def __init__(self):
+    def __init__(self, device):
         super().__init__()
+        self.device = device
         self.lstm = nn.LSTMCell(input_size=256, hidden_size=256)
-        self.action_type_head = ActionTypeHead()
-        self.location_head = LocationHead()
+        self.action_type_head = ActionTypeHead(device=device)
+        self.location_head = LocationHead(device=device)
     
     def forward(self, observation_feature, game_state, hidden_and_cell_states):
         hidden_state, cell_state = self.lstm(observation_feature, hidden_and_cell_states)
@@ -32,7 +33,4 @@ class PolicyNet(nn.Module):
             (hidden_state, cell_state)
     
     def init_hidden_state(self, batch_size=1):
-        device = next(self.parameters()).device
-        hidden = (torch.zeros(batch_size, 256).to(device), 
-                  torch.zeros(batch_size, 256).to(device))
-        return hidden
+        return (torch.zeros(batch_size, 256).to(self.device), torch.zeros(batch_size, 256).to(self.device))
