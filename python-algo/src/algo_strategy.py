@@ -8,6 +8,7 @@ from torch.optim import Adam
 
 from . import gamelib
 from . import constants
+from . import utils
 from .arch.model import FeatureEncoder, PolicyNet
 
 """
@@ -24,7 +25,7 @@ Advanced strategy tips:
 """
 
 class AlgoStrategy(gamelib.AlgoCore):
-    def __init__(self):
+    def __init__(self, args):
         super().__init__()
         seed = random.randrange(maxsize)
         random.seed(seed)
@@ -33,8 +34,17 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.device = 'cpu'
         gamelib.debug_write('Using {}'.format(self.device))
 
-        self.is_learning = True
+        self.is_learning = args.is_learning
+        if self.is_learning:
+            gamelib.debug_write("I'm LEARNING!")
         self.lr = 0.01
+        
+        self.is_enemy = args.is_enemy
+        if self.is_enemy:
+            gamelib.debug_write("I'm EVIL so I'm not LEARNING! Ignoring is_learning...")
+            self.is_learning = False
+
+        self.checkpoint_manager = utils.CheckpointManager(self.is_enemy)
 
     def on_game_start(self, config):
         """ 
@@ -62,6 +72,19 @@ class AlgoStrategy(gamelib.AlgoCore):
     def setup_policy_net(self):
         self.feature_encoder = FeatureEncoder().to(self.device)
         self.policy = PolicyNet(self.device).to(self.device)
+        
+        if self.is_learning:
+            params = list(self.feature_encoder.parameters()) + list(self.policy.parameters())
+            self.optimizer = Adam(params, lr=self.lr)
+        
+        if self.checkpoint_manager.model_id:
+            feature_encoder_path, policy_path, optimizer_path = self.checkpoint_manager.get_latest_model_path()
+            self.feature_encoder.load_state_dict(torch.load(feature_encoder_path))
+            self.policy.load_state_dict(torch.load(policy_path))
+
+            if self.is_learning:
+                self.optimizer.load_state_dict(torch.load(optimizer_path))
+
         self.memory_state = self.policy.init_hidden_state()
 
     def on_turn(self, turn_state):
@@ -141,20 +164,21 @@ class AlgoStrategy(gamelib.AlgoCore):
     def on_game_end(self):
         if self.is_learning:
             self.action_lengths = [len(logps) for logps in self.ep_action_type_logps]
-            self.print_statistics()
+            stats_dict = self.get_statistics()
+            gamelib.debug_write(stats_dict)
+            
+            # train
             self.optimizer.zero_grad()
             episode_loss = self.compute_loss()
             episode_loss.backward()
             self.optimizer.step()
 
-            # TODO: save model and optimizer state_dict for another day
+            # checkpoint
+            self.checkpoint_manager.save_model(self.feature_encoder, self.policy, self.optimizer)
+            self.checkpoint_manager.save_stats(stats_dict)
     
     def setup_vanila_policy_gradient(self):
-        params = list(self.feature_encoder.parameters()) + list(self.policy.parameters())
-        # TODO: load state_dict from disk if possible to continue training
-        self.optimizer = Adam(params, lr=self.lr)
         self.my_health = self.enemy_health = self.config['resources']['startingHP']
-
         self.ep_action_type_logps = []
         self.ep_location_logps = []
         self.ep_rews = []
@@ -190,17 +214,18 @@ class AlgoStrategy(gamelib.AlgoCore):
             rtgs[i] = self.ep_rews[i] + (rtgs[i+1] if i+1 < n else 0)
         return rtgs
 
-    def print_statistics(self):
+    def get_statistics(self):
+        stats = dict()
         # reward and return
-        gamelib.debug_write('EPISODE LENGTH', len(self.ep_rews))
-        gamelib.debug_write('EPISODE RETURN', sum(self.ep_rews))
-        gamelib.debug_write('REWARD MEAN', np.mean(self.ep_rews))
-        gamelib.debug_write('REWARD STD', np.std(self.ep_rews))
-        gamelib.debug_write('REWARD MAX', max(self.ep_rews))
-        gamelib.debug_write('REWARD MIN', min(self.ep_rews))
-
+        stats['episode_length'] = len(self.ep_rews)
+        stats['episode_return'] = sum(self.ep_rews) 
+        stats['reward_mean']    = np.mean(self.ep_rews)
+        stats['reward_std']     = np.std(self.ep_rews)
+        stats['reward_max']     = max(self.ep_rews)
+        stats['reward_min']     = min(self.ep_rews)
         # actions
-        gamelib.debug_write('ACTION LEN MEAN', np.mean(self.action_lengths))
-        gamelib.debug_write('ACTION LEN STD', np.std(self.action_lengths))
-        gamelib.debug_write('ACTION LEN MAX', max(self.action_lengths))
-        gamelib.debug_write('ACTION LEN MIN', min(self.action_lengths)) 
+        stats['action_length_mean'] = np.mean(self.action_lengths)
+        stats['action_length_std']  = np.std(self.action_lengths) 
+        stats['action_length_max']  = max(self.action_lengths)
+        stats['action_length_min']  = min(self.action_lengths)
+        return stats
