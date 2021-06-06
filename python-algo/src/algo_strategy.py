@@ -110,21 +110,22 @@ class AlgoStrategy(gamelib.AlgoCore):
         game_state.submit_turn()
 
     def policy_net_strategy(self, game_state):
+        already_removing, already_upgrading = set(), set()
         if self.is_learning:
             action_type_logps, location_logps = [], []
 
         spatial_features, scalar_features = self.game_state_to_features(game_state)
         observation_features = self.feature_encoder(spatial_features, scalar_features)
         action_type = None
-        while action_type != 0:
+        while action_type != constants.NOOP:
             action_type, _, action_type_logp, location, _, location_logp, self.memory_state \
                 = self.policy(observation_features, game_state, self.memory_state)
-            # gamelib.debug_write(action_type, location)
-            if action_type in [1, 2, 3, 4, 5, 6]:
-                game_state.attempt_spawn(constants.ALL_ACTIONS[action_type], [location])
-            elif action_type == 7:
+            
+            if action_type in constants.STRUCTURES + constants.MOBILES:
+                game_state.attempt_spawn(constants.ACTION_SHORTHAND[action_type], [location])
+            elif action_type == constants.UPGRADE:
                 game_state.attempt_upgrade([location])
-            elif action_type == 8:
+            elif action_type == constants.REMOVE:
                 game_state.attempt_remove([location])
             
             if self.is_learning:
@@ -171,6 +172,7 @@ class AlgoStrategy(gamelib.AlgoCore):
     def on_game_end(self):
         if self.is_learning:
             # train
+            gamelib.debug_write('Optimizing policy network...')
             self.optimizer.zero_grad()
             episode_loss = self.compute_loss()
             episode_loss.backward()

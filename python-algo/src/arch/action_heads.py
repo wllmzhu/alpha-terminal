@@ -51,21 +51,27 @@ def valid_action_type_mask(game_state):
 
     mask = [True] * 9
     # check affordability
-    for i_unit in range(1, 7):
-        mask[i_unit] = mask[i_unit] and game_state.number_affordable(constants.ALL_ACTIONS[i_unit]) > 0
-    if not any(map(game_state.contains_stationary_unit, constants.MY_LOCATIONS)):
-        mask[7] = False
-        mask[8] = False
+    for unit in constants.STRUCTURES + constants.MOBILES:
+        mask[unit] = mask[unit] and game_state.number_affordable(constants.ACTION_SHORTHAND[unit]) > 0
+    # if there is any structure not pending removal
+    mask[constants.REMOVE]  = any(map(
+        lambda loc: game_state.contains_stationary_unit(loc) and not game_state.game_map[loc][0].pending_removal, 
+        constants.MY_LOCATIONS))
+    # if there is any structure
+    mask[constants.UPGRADE] = any(map(game_state.contains_stationary_unit, constants.MY_LOCATIONS))
     mask = torch.tensor(mask)
     return mask
 
 def valid_location_mask(game_state, action_type):
     # NOTE: gamestate=None for SL
-    if game_state is None or action_type == 0:  # SL or NOOP
+    if game_state is None or action_type == constants.NOOP:             # SL or NOOP
         mask = [True] * 210
-    elif action_type in range(1, 7):            # structure or mobile
-        mask = [game_state.can_spawn(constants.ALL_ACTIONS[action_type], loc) for loc in constants.MY_LOCATIONS]
-    else:                                       # remove or upgrade
-        mask = [game_state.contains_stationary_unit(loc) is not False for loc in constants.MY_LOCATIONS]
+    elif action_type in constants.STRUCTURES + constants.MOBILES:     # structure or mobile
+        mask = [game_state.can_spawn(constants.ACTION_SHORTHAND[action_type], loc) for loc in constants.MY_LOCATIONS]
+    elif action_type == constants.REMOVE:                               # remove
+        mask = [bool(game_state.contains_stationary_unit(loc)) and not game_state.game_map[loc][0].pending_removal 
+                for loc in constants.MY_LOCATIONS]
+    else:                                                               # upgrade
+        mask = [bool(game_state.contains_stationary_unit(loc)) for loc in constants.MY_LOCATIONS]
     mask = torch.tensor(mask)
     return mask
