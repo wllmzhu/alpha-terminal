@@ -17,7 +17,7 @@ class CheckpointManager:
         if not self.is_prod:
             self.model_id = self.get_latest_model_id()
             self.next_id = self.get_next_model_id()
-            gamelib.debug_write('MODEL ID', self.checkpoint_manager.model_id)
+            gamelib.debug_write('MODEL ID', self.model_id)
 
     def get_checkpoint_path(self):
         file_dir = os.path.dirname(os.path.realpath(__file__))

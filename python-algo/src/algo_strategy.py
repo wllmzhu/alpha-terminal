@@ -170,15 +170,16 @@ class AlgoStrategy(gamelib.AlgoCore):
 
     def on_game_end(self):
         if self.is_learning:
-            self.action_lengths = [len(logps) for logps in self.ep_action_type_logps]
-            stats_dict = self.get_statistics()
-            gamelib.debug_write(stats_dict)
-            
             # train
             self.optimizer.zero_grad()
             episode_loss = self.compute_loss()
             episode_loss.backward()
             self.optimizer.step()
+            
+            # log metrics
+            self.loss = episode_loss.item()
+            stats_dict = self.get_statistics()
+            gamelib.debug_write(stats_dict)
 
             # checkpoint
             self.checkpoint_manager.save_model(self.feature_encoder, self.policy, self.optimizer)
@@ -198,12 +199,14 @@ class AlgoStrategy(gamelib.AlgoCore):
 
     def compute_loss(self):
         # TODO: check if need to shift rewards by 1
+        self.action_lengths = [len(logps) for logps in self.ep_action_type_logps]
         ep_weights = list(self.reward_to_go())
         batch_weights = []
         for action_len, weight in zip(self.action_lengths, ep_weights):
             batch_weights.extend([weight] * action_len)
         batch_action_type_logps = [logp for logps in self.ep_action_type_logps for logp in logps]
         batch_location_logps = [logp for logps in self.ep_location_logps for logp in logps]
+        self.ep_ret = batch_weights
         
         batch_weights = torch.tensor(batch_weights, dtype=torch.float32).to(self.device)
         batch_action_type_logps = torch.cat(batch_action_type_logps)
@@ -223,16 +226,25 @@ class AlgoStrategy(gamelib.AlgoCore):
 
     def get_statistics(self):
         stats = dict()
-        # reward and return
+        # policy gradient loss
+        stats['policy_gradient_loss'] = self.loss
+        # reward and return in theory
         stats['episode_length'] = len(self.ep_rews)
         stats['episode_return'] = sum(self.ep_rews) 
         stats['reward_mean']    = np.mean(self.ep_rews)
         stats['reward_std']     = np.std(self.ep_rews)
         stats['reward_max']     = max(self.ep_rews)
         stats['reward_min']     = min(self.ep_rews)
+        # actual return experienced by the agent
+        stats['return_cumulative']  = sum(self.ep_ret)
+        stats['return_mean']        = np.mean(self.ep_ret)
+        stats['return_std']         = np.std(self.ep_ret)
+        stats['return_max']         = max(self.ep_ret)
+        stats['return_min']         = min(self.ep_ret)
         # actions
-        stats['action_length_mean'] = np.mean(self.action_lengths)
-        stats['action_length_std']  = np.std(self.action_lengths) 
-        stats['action_length_max']  = max(self.action_lengths)
-        stats['action_length_min']  = min(self.action_lengths)
+        stats['action_length_cumulative']   = sum(self.action_lengths)
+        stats['action_length_mean']         = np.mean(self.action_lengths)
+        stats['action_length_std']          = np.std(self.action_lengths) 
+        stats['action_length_max']          = max(self.action_lengths)
+        stats['action_length_min']          = min(self.action_lengths)
         return stats
