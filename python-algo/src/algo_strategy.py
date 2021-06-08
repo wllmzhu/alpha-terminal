@@ -143,15 +143,18 @@ class AlgoStrategy(gamelib.AlgoCore):
     def on_final_reward(self,game_state_string):
         if self.is_learning:
             turn_state = json.loads(game_state_string)
+            
             # change of health
             my_health=float(turn_state.get('p1Stats')[0])
             enemy_health=float(turn_state.get('p2Stats')[0])
             reward = my_health - self.my_health
             reward += self.enemy_health - enemy_health
+            
             # additional reward of winner or loser
             winner=int(turn_state.get('endStats')['winner'])
             win_or_not_reward=constants.WINNER_REWARD if winner==1 else constants.LOSER_REWARD
             reward += win_or_not_reward
+            
             # append the last reward 
             self.ep_rews.append(reward)
             
