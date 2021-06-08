@@ -84,14 +84,14 @@ class AlgoStrategy(gamelib.AlgoCore):
             params = list(self.feature_encoder.parameters()) + list(self.policy.parameters())
             self.optimizer = Adam(params, lr=self.lr)
         
-        # if self.checkpoint_manager.checkpoint_exists():
-        #     gamelib.debug_write('Loading model weights...')
-        #     feature_encoder_path, policy_path, optimizer_path = self.checkpoint_manager.get_latest_model_path()
-        #     self.feature_encoder.load_state_dict(torch.load(feature_encoder_path))
-        #     self.policy.load_state_dict(torch.load(policy_path))
+        if self.checkpoint_manager.checkpoint_exists():
+            gamelib.debug_write('Loading model weights...')
+            feature_encoder_path, policy_path, optimizer_path = self.checkpoint_manager.get_latest_model_path()
+            self.feature_encoder.load_state_dict(torch.load(feature_encoder_path))
+            self.policy.load_state_dict(torch.load(policy_path))
 
-        #     if self.is_learning:
-        #         self.optimizer.load_state_dict(torch.load(optimizer_path))
+            if self.is_learning:
+                self.optimizer.load_state_dict(torch.load(optimizer_path))
 
         self.memory_state = self.policy.init_hidden_state()
 
