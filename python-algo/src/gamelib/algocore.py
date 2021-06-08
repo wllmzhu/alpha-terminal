@@ -44,11 +44,11 @@ class AlgoCore(object):
         pass
     
     def on_final_reward(self,game_state_string):
-    """
-    This function is to get the winner information,
-    to calculate the reward of actions in the last turn.
-    """
-    pass
+        """
+        This function is to get the winner information,
+        to calculate the reward of actions in the last turn.
+        """
+        pass
 
     def on_game_end(self):
         """
