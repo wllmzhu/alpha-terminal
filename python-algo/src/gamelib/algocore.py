@@ -42,6 +42,13 @@ class AlgoCore(object):
         They can be handled in this function. 
         """
         pass
+    
+    def on_final_reward(self,game_state_string):
+    """
+    This function is to get the winner information,
+    to calculate the reward of actions in the last turn.
+    """
+    pass
 
     def on_game_end(self):
         """
@@ -87,6 +94,7 @@ class AlgoCore(object):
                     """
                     This is the end game message. This means the game is over so break and finish the program.
                     """
+                    self.on_final_reward(game_state_string)
                     debug_write("Got end state, game over. Stopping algo.")
                     break
                 else:
