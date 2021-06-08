@@ -164,7 +164,8 @@ class AlgoStrategy(gamelib.AlgoCore):
                     unit = spatial_features[x][y][0]
                     feature = []
                     feature +=  STRUCTURE_ONEHOT[unit.unit_type]
-                    feature +=  [unit.health, unit.player_index]
+                    feature +=  [unit.health]
+                    feature +=  [unit.player_index==1, unit.player_index==2]
                     feature +=  list(map(int, [unit.pending_removal, unit.upgraded]))
                     # TODO: add features
                     spatial_features[x][y] = feature
