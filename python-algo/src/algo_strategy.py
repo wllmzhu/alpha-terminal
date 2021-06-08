@@ -151,12 +151,15 @@ class AlgoStrategy(gamelib.AlgoCore):
             reward += self.enemy_health - enemy_health
             
             # additional reward of winner or loser
-            winner=int(turn_state.get('endStats')['winner'])
-            win_or_not_reward=constants.WINNER_REWARD if winner==1 else constants.LOSER_REWARD
+            self.winner=int(turn_state.get('endStats')['winner'])
+            win_or_not_reward=constants.WINNER_REWARD if self.winner==1 else constants.LOSER_REWARD
             reward += win_or_not_reward
             
             # append the last reward 
             self.ep_rews.append(reward)
+            
+            # get turn number in total
+            self.total_turn=int(turn_state.get('turnInfo')[1])
             
     def game_state_to_features(self, game_state):
         # spatial features
@@ -251,6 +254,9 @@ class AlgoStrategy(gamelib.AlgoCore):
 
     def get_statistics(self):
         stats = dict()
+        # winner and turn_number
+        stats['winner']         = self.winner
+        stats['total_turn']     = self.total_turn
         # policy gradient loss
         stats['policy_gradient_loss'] = self.loss
         # reward and return in theory
