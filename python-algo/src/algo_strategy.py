@@ -84,14 +84,14 @@ class AlgoStrategy(gamelib.AlgoCore):
             params = list(self.feature_encoder.parameters()) + list(self.policy.parameters())
             self.optimizer = Adam(params, lr=self.lr)
         
-        if self.checkpoint_manager.checkpoint_exists():
-            gamelib.debug_write('Loading model weights...')
-            feature_encoder_path, policy_path, optimizer_path = self.checkpoint_manager.get_latest_model_path()
-            self.feature_encoder.load_state_dict(torch.load(feature_encoder_path))
-            self.policy.load_state_dict(torch.load(policy_path))
+        # if self.checkpoint_manager.checkpoint_exists():
+        #     gamelib.debug_write('Loading model weights...')
+        #     feature_encoder_path, policy_path, optimizer_path = self.checkpoint_manager.get_latest_model_path()
+        #     self.feature_encoder.load_state_dict(torch.load(feature_encoder_path))
+        #     self.policy.load_state_dict(torch.load(policy_path))
 
-            if self.is_learning:
-                self.optimizer.load_state_dict(torch.load(optimizer_path))
+        #     if self.is_learning:
+        #         self.optimizer.load_state_dict(torch.load(optimizer_path))
 
         self.memory_state = self.policy.init_hidden_state()
 
@@ -121,7 +121,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         while action_type != constants.NOOP:
             action_type, _, action_type_logp, location, _, location_logp, self.memory_state \
                 = self.policy(observation_features, game_state, self.memory_state)
-            
+
             if action_type in constants.STRUCTURES + constants.MOBILES:
                 game_state.attempt_spawn(constants.ACTION_SHORTHAND[action_type], [location])
             elif action_type == constants.UPGRADE:
@@ -132,6 +132,9 @@ class AlgoStrategy(gamelib.AlgoCore):
             if self.is_learning:
                 action_type_logps.append(action_type_logp)
                 location_logps.append(location_logp)
+        
+        #when all actions has been taken, flush the queue mask in policy net's action head
+        self.policy.flush_queue_mask()
         
         if self.is_learning:
             if game_state.turn_number > 0: # skip turn 0 reward
@@ -173,7 +176,7 @@ class AlgoStrategy(gamelib.AlgoCore):
                     # TODO: add features
                     spatial_features[x][y] = feature
                 else:
-                    spatial_features[x][y] = [0] * 7
+                    spatial_features[x][y] = [0] * 8
         spatial_features = torch.tensor(spatial_features, dtype=torch.float).to(self.device)
         spatial_features = spatial_features.permute(2, 0, 1)
         spatial_features = torch.unsqueeze(spatial_features, 0)

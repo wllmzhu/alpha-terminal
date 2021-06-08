@@ -34,3 +34,6 @@ class PolicyNet(nn.Module):
     
     def init_hidden_state(self, batch_size=1):
         return (torch.zeros(batch_size, 256).to(self.device), torch.zeros(batch_size, 256).to(self.device))
+
+    def flush_queue_mask(self):
+        self.location_head.flush_queue_mask()

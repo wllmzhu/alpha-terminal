@@ -12,7 +12,7 @@ class SpatialEncoder(nn.Module):
         self.fc2 = nn.Linear(512, 224)
 
     def forward(self, x):
-        # (N, 7, 28, 28)
+        # (N, 8, 28, 28)
         # (N, 16, 13, 13)
         x = self.pool(F.relu(self.conv1(x)))
         # (N, 32, 5, 5)
