@@ -7,7 +7,7 @@ import os
 
 cost_dict = {'WALL':1, 'FACTORY':4, 'TURRET':2, 'SCOUT':1, 'DEMOLISHER':3, 'INTERCEPTOR':1} 
 upgrade_cost_dict = {'WALL':1, 'FACTORY':4, 'TURRET':4}
-idx_dict = {'WALL':0, 'FACTORY':1, 'TURRET':2, 'to_remove':3, 'upgraded':4, 'belongs_to_1':5, 'belongs_to_2':6, 'health':7,
+idx_dict = {'WALL':0, 'FACTORY':1, 'TURRET':2, 'health':3, 'belongs_to_1':4, 'belongs_to_2':5, 'to_remove':6, 'upgraded':7,
             'sd_damage':8, 'sd_belongs_to_1':9, 'sd_belongs_to_2':10, 'bch_damage':11, 'bch_belongs_to_1':12, 'bch_belongs_to_2':13,
             'dmg_damage':14, 'dmg_belongs_to_1':15, 'dmg_belongs_to_2':16, 'sld_hp':17, 'sld_belongs_to_1':18, 'sld_belongs_to_2':19,
             'dth_number':20, 'dth_belongs_to_1':21, 'dth_belongs_to_2':22, 'atk_damage':23, 'atk_belongs_to_1':24, 'atk_belongs_to_2':25}
