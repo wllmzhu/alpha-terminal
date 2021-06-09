@@ -52,12 +52,11 @@ class LocationHead(nn.Module):
         super().__init__()
         self.device = device
         self.fc1 = nn.Linear(256, 210)
-        self.already_removing = [False] * 210
-        self.already_upgrading = [False] * 210
+        self.flush_queue_mask()
 
     def flush_queue_mask(self):
-        self.already_removing = [False] * 210
-        self.already_upgrading = [False] * 210
+        self.already_removing = set() 
+        self.already_upgrading = set()
 
     def forward(self, x, game_state, action_type):
         logits = self.fc1(x)
@@ -67,29 +66,28 @@ class LocationHead(nn.Module):
         dist = Categorical(logits=logits)
         location = dist.sample()
         logp = dist.log_prob(location)
+        location_xy = constants.MY_LOCATIONS[location.item()]
 
         if action_type == constants.REMOVE:
-            self.already_removing[location.item()] = True
+            self.already_removing.add(tuple(location_xy))
         elif action_type == constants.UPGRADE:
-            self.already_upgrading[location.item()] = True
+            self.already_upgrading.add(tuple(location_xy))
         
-        return constants.MY_LOCATIONS[location.item()], logits, logp
+        return location_xy, logits, logp
 
     def valid_location_mask(self, game_state, action_type):
         # NOTE: gamestate=None for SL
         if game_state is None or action_type == constants.NOOP:             # SL or NOOP
             mask = [True] * 210
-        elif action_type in constants.STRUCTURES + constants.MOBILES:     # structure or mobile
+        elif action_type in constants.STRUCTURES + constants.MOBILES:       # structure or mobile
             mask = [game_state.can_spawn(constants.ACTION_SHORTHAND[action_type], loc) for loc in constants.MY_LOCATIONS]
         elif action_type == constants.REMOVE:                               # remove
             mask = [bool(game_state.contains_stationary_unit(loc)) 
-                    and not game_state.game_map[loc][0].pending_removal
+                    and tuple(loc) not in self.already_removing
                     for loc in constants.MY_LOCATIONS]
-            mask = mask and not self.already_removing
         else:                                                               # upgrade
             mask = [bool(game_state.contains_stationary_unit(loc)) 
-                    # and not self.already_upgrading[loc[0],loc[1]] == 1
+                    and tuple(loc) not in self.already_upgrading
                     for loc in constants.MY_LOCATIONS]
-            mask = mask and not self.already_removing
         mask = torch.tensor(mask)
         return mask
