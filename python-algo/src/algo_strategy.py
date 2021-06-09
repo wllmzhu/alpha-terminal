@@ -231,7 +231,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         ep_weights = list(self.reward_to_go())
         batch_weights = []
         for action_len, weight in zip(self.action_lengths, ep_weights):
-            batch_weights.extend([weight] * action_len)
+            batch_weights.extend([weight / action_len] * action_len)
         batch_action_type_logps = [logp for logps in self.ep_action_type_logps for logp in logps]
         batch_location_logps = [logp for logps in self.ep_location_logps for logp in logps]
         self.ep_ret = batch_weights
