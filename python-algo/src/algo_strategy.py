@@ -111,7 +111,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         game_state.submit_turn()
 
     def policy_net_strategy(self, game_state):
-        already_removing, already_upgrading = set(), set()
         if self.is_learning:
             action_type_logps, location_logps = [], []
 
@@ -133,7 +132,7 @@ class AlgoStrategy(gamelib.AlgoCore):
                 action_type_logps.append(action_type_logp)
                 location_logps.append(location_logp)
         
-        #when all actions has been taken, flush the queue mask in policy net's action head
+        # when all actions has been taken, flush the queue mask in policy net's action head
         self.policy.flush_queue_mask()
         
         if self.is_learning:
@@ -143,26 +142,6 @@ class AlgoStrategy(gamelib.AlgoCore):
             self.ep_action_type_logps.append(action_type_logps) 
             self.ep_location_logps.append(location_logps)
             
-    def on_final_reward(self,game_state_string):
-        if self.is_learning:
-            turn_state = json.loads(game_state_string)
-            
-            # change of health
-            my_health=float(turn_state.get('p1Stats')[0])
-            enemy_health=float(turn_state.get('p2Stats')[0])
-            reward = my_health - self.my_health
-            reward += self.enemy_health - enemy_health
-            
-            # additional reward of winner or loser
-            self.winner=int(turn_state.get('endStats')['winner'])
-            win_or_not_reward=constants.WINNER_REWARD if self.winner==1 else constants.LOSER_REWARD
-            reward += win_or_not_reward
-            
-            # append the last reward 
-            self.ep_rews.append(reward)
-            
-            # get turn number in total
-            self.total_turn=int(turn_state.get('turnInfo')[1])
             
     def game_state_to_features(self, game_state):
         # spatial features
@@ -196,6 +175,27 @@ class AlgoStrategy(gamelib.AlgoCore):
 
     # Methods for reinforcement learning
 
+    def on_final_reward(self,game_state_string):
+        if self.is_learning:
+            turn_state = json.loads(game_state_string)
+            
+            # change of health
+            my_health = float(turn_state.get('p1Stats')[0])
+            enemy_health = float(turn_state.get('p2Stats')[0])
+            reward = my_health - self.my_health
+            reward += self.enemy_health - enemy_health
+            
+            # additional reward of winner or loser
+            self.winner = int(turn_state.get('endStats')['winner'])
+            win_or_not_reward = constants.WINNER_REWARD if self.winner == 1 else constants.LOSER_REWARD
+            reward += win_or_not_reward
+            
+            # append the last reward 
+            self.ep_rews.append(reward)
+            
+            # get turn number in total
+            self.total_turn = int(turn_state.get('turnInfo')[1])
+
     def on_game_end(self):
         if self.is_learning:
             # train
@@ -227,7 +227,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         return reward
 
     def compute_loss(self):
-        # TODO: check if need to shift rewards by 1
         self.action_lengths = [len(logps) for logps in self.ep_action_type_logps]
         ep_weights = list(self.reward_to_go())
         batch_weights = []
@@ -248,9 +247,8 @@ class AlgoStrategy(gamelib.AlgoCore):
 
     def reward_to_go(self):
         n = len(self.ep_rews)        
-        #gamelib.debug_write(self.ep_rews)
         rtgs = np.zeros_like(self.ep_rews)
-        gamma=constants.GAMMA
+        gamma = constants.GAMMA
         for i in reversed(range(n)):
             rtgs[i] = self.ep_rews[i] + gamma*(rtgs[i+1] if i+1 < n else 0)
         return rtgs
