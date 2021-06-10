@@ -13,6 +13,10 @@ class CheckpointManager:
         self.checkpoint_path = self.get_checkpoint_path()
         if not os.path.exists(self.checkpoint_path):
             os.mkdir(self.checkpoint_path)
+            
+        stat_path=os.path.join(self.checkpoint_path, 'stats')
+        if not os.path.exists(stat_path):
+            os.mkdir(stat_path)
         
         if not self.is_prod:
             self.model_id = self.get_latest_model_id()
