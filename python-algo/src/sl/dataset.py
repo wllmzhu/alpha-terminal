@@ -2,8 +2,11 @@
 import torch
 import json
 import numpy as np
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
+from torch.utils.data.dataloader import default_collate
 import os
+
+torch.manual_seed(0)
 
 cost_dict = {'WALL':1, 'FACTORY':4, 'TURRET':2, 'SCOUT':1, 'DEMOLISHER':3, 'INTERCEPTOR':1} 
 upgrade_cost_dict = {'WALL':1, 'FACTORY':4, 'TURRET':4}
@@ -15,10 +18,13 @@ rev_idx_dict = {v: k for k, v in idx_dict.items()}
 env_dict = {'player1_health': 0, 'player1_SP': 1, 'player1_MP': 2, 'player2_health': 3, 'player2_SP': 4, 'player2_MP': 5, 'elapsed_time': 6}
 
 
-class Terminal_Replay_Dataset_SL(Dataset):
-    def __init__(self, replay_file_list, max_seq_len):
+class Terminal_Replay_Dataset(Dataset):
+    def __init__(self, replay_file_list, max_seq_len, with_events=False):
+        super(Terminal_Replay_Dataset, self).__init__()
+
         self.replay_file_list = replay_file_list
         self.max_seq_len = max_seq_len
+        self.with_events = with_events
 
     def __len__(self):
         return len(self.replay_file_list)
@@ -27,30 +33,20 @@ class Terminal_Replay_Dataset_SL(Dataset):
         filename = self.replay_file_list[idx]
         state_list = []
         env_list = []
-        actions_list = []
-
+        actions_list = []   #list of list of int
+        locs_list = []      #list of list of [x,y]
         with open(filename) as f:
-            #print(filename)
             player1_sa, player2_sa = self._process_replay(f)
-
             for sa in player1_sa + player2_sa:
-                state, env, actions = sa
+                state, env, actions, locs = sa
                 state = torch.from_numpy(state)
                 env = torch.from_numpy(env)
-                if len(actions) == 0:
-                    actions = np.zeros((28,28,8,1))                    
-                else:
-                    actions = actions[:self.max_seq_len]
-                    actions = np.stack(actions, axis=3)
-                actions = torch.from_numpy(actions)
                 state_list.append(state)
                 env_list.append(env)
                 actions_list.append(actions)   
-
-        state = torch.stack(state_list, axis=0)
-        env = torch.stack(env_list, axis=0)
-
-        return {'state': state, 'env': env, 'actions': actions}
+                locs_list.append(locs)
+        assert(len(state_list) == len(env_list) == len(actions_list) == len(locs_list))
+        return {'len': len(state_list), 'state_list': state_list, 'env_list': env_list, 'actions_list': actions_list, 'locs_list':locs_list}
 
     def _process_replay(self, f):
         player1_state_action = []
@@ -100,30 +96,68 @@ class Terminal_Replay_Dataset_SL(Dataset):
 
     def _construct_state_action(self, start_state, env, spawn, from_player_view):
         action_list = []
+        loc_list = []
         for idx, unit in enumerate(spawn):
             #initialize curr_state
             if idx==0:
                 state = start_state.copy()
             #if spawning enemy unit, ignore
             if unit[3] != from_player_view:
-                continue
-                    
+                continue   
             #construct action tensor
-            action_tensor = np.zeros((28,28,8))
             x, y = unit[0]
             if from_player_view == 2: #if from player2's view, coordinates are flipped
                 x, y = self._flip(x, y)
             unit_type = unit[1]
-            action_tensor[x, y, unit_type] = 1
-            
             #append to list
-            action_list.append(action_tensor) 
-            
-        return [start_state, env, action_list]
+            action_list.append(unit_type + 1)
+            loc_list.append([x,y]) 
+        #append NOOP
+        action_list.append(0)
+        loc_list.append([0,0])
+        return [start_state, env, action_list, loc_list]
+
+    def _construct_state(self, p1Units, p2Units, event_list, from_player_view):
+        #state as of the end of last turn
+        #(type, health, upgraded, demolish, touchdown_type, damage_received, damage_dealt)
+        if self.with_events == True:
+            state = np.zeros((28,28,26))
+            if from_player_view == 1:
+                state = self._add_units(p1Units, state, internal_playerID=1, flip_coord=False)
+                state = self._add_units(p2Units, state, internal_playerID=2, flip_coord=False)
+                for event in event_list:
+                    state = self._add_events(event, state, flip_coord=False)
+            else: #from player2's view, so player2 becomes "player1", and all coord needs to be flipped
+                state = self._add_units(p1Units, state, internal_playerID=2, flip_coord=True)
+                state = self._add_units(p2Units, state, internal_playerID=1, flip_coord=True)
+                for event in event_list:
+                    state = self._add_events(event, state, flip_coord=True)
+        else:
+            state = np.zeros((28,28,8))
+            if from_player_view == 1:
+                state = self._add_units(p1Units, state, internal_playerID=1, flip_coord=False)
+                state = self._add_units(p2Units, state, internal_playerID=2, flip_coord=False)
+            else: #from player2's view, so player2 becomes "player1", and all coord needs to be flipped
+                state = self._add_units(p1Units, state, internal_playerID=2, flip_coord=True)
+                state = self._add_units(p2Units, state, internal_playerID=1, flip_coord=True)   
+
+        return state   
+
+    def _construct_env(self, p1Stats, p2Stats, turn_num, from_player_view):
+        #(player1_health, player1_SP, player1_MP, player2_health, player2_SP, player2_MP, elapsed_time)
+        env = np.zeros(7)
+        if from_player_view == 1:
+            env[0:3] = p1Stats[0:3]
+            env[3:6] = p2Stats[0:3]
+        else: #if from player2's view, internal playerID is flipped
+            env[0:3] = p2Stats[0:3]
+            env[3:6] = p1Stats[0:3]
+        env[6] = turn_num     # elapsed_time
+        return env
 
     def _add_units(self, units, state, internal_playerID, flip_coord):
         wall, factory, turret, scout, demolisher, interceptor, to_remove, upgraded = units
-            
+
         for unit in wall:
             x, y, health= unit[0], unit[1], unit[2]
             if flip_coord:
@@ -248,47 +282,15 @@ class Terminal_Replay_Dataset_SL(Dataset):
 
         return state
 
-    def _construct_state(self, p1Units, p2Units, event_list, from_player_view):
-        #state as of the end of last turn
-        #(type, health, upgraded, demolish, touchdown_type, damage_received, damage_dealt)
-        state = np.zeros((28,28,26))
-
-        if from_player_view == 1:
-            state = self._add_units(p1Units, state, internal_playerID=1, flip_coord=False)
-            state = self._add_units(p2Units, state, internal_playerID=2, flip_coord=False)
-            for event in event_list:
-                state = self._add_events(event, state, flip_coord=False)
-            
-        else: #from player2's view, so player2 becomes "player1", and all coord needs to be flipped
-            state = self._add_units(p1Units, state, internal_playerID=2, flip_coord=True)
-            state = self._add_units(p2Units, state, internal_playerID=1, flip_coord=True)
-            for event in event_list:
-                state = self._add_events(event, state, flip_coord=True)
-        
-        return state   
-
-    def _construct_env(self, p1Stats, p2Stats, turn_num, from_player_view):
-        #(player1_health, player1_SP, player1_MP, player2_health, player2_SP, player2_MP, elapsed_time)
-        env = np.zeros(7)
-        if from_player_view == 1:
-            env[0:3] = p1Stats[0:3]
-            env[3:6] = p2Stats[0:3]
-        else: #if from player2's view, internal playerID is flipped
-            env[0:3] = p2Stats[0:3]
-            env[3:6] = p1Stats[0:3]
-        env[6] = turn_num     # elapsed_time
-        return env
-
     def _flip(self, x, y):
         new_y = 27 - y
         return x, new_y
 
 
-
 def get_all_filenames(data_dir):
     filename_list = []
     for dir in os.scandir(data_dir):
-        if dir.is_dir() and int(dir.name) > 0:
+        if dir.is_dir() and int(dir.name) > 200: #get only the recent games
             for replay in os.scandir(dir):
                 filename = os.path.join(data_dir, dir, replay.name)
                 filename_list.append(filename)
@@ -305,12 +307,74 @@ def split_filenames(filename_list, ratio=(0.7, 0.15, 0.15)):
     return train_set, val_set, test_set
 
 
+def Terminal_Replay_Collate(batch):
+    # if len(batch) > 1:
+    #     print('sorry, only supporting batch size of 1 right now! (since the 20 or so state-action pairs from each replay file is kind of like a batch)')
 
-def test():
-    filename_list = get_all_filenames('/Users/williamzhu/Github/EE239_Terminal_RL/alphaterminal/data/competitions')
-    dataset = Terminal_Replay_Dataset_SL(filename_list, 50)
-    state_env, actions = dataset[0]
-    print(state_env)
+    max_len_actions = np.max([len(actions) for replay in batch for actions in replay['actions_list']])
+    max_len_game = np.max([len(replay['state_list']) for replay in batch])
+
+    NOOP = 0
+    NOOP_LOC = [0,0]
+    empty_state = torch.zeros_like(batch[0]['state_list'][0])
+    empty_env = torch.zeros_like(batch[0]['env_list'][0])
+    empty_actions = [NOOP for _ in range(max_len_actions)]
+    empty_locs = [NOOP_LOC for _ in range(max_len_actions)]
+
+    state_list = []
+    env_list = []
+    actions_list = []
+    locs_list = []
+    
+    for replay in batch:
+        if replay['len'] <= 4:
+            print('ignoring bad replay')
+            continue
+        
+        replay['state_list'] += [empty_state] * (max_len_game - len(replay['state_list']))
+        replay['state_list'] = torch.stack(replay['state_list'], axis=0)
+        state_list.extend(replay['state_list'])
+
+        replay['env_list'] += [empty_env] * (max_len_game - len(replay['env_list']))
+        replay['env_list'] = torch.stack(replay['env_list'], axis=0)
+        env_list.extend(replay['env_list'])
+
+        for actions in replay['actions_list']:
+            actions += [NOOP] * (max_len_actions - len(actions))
+        replay['actions_list'] += [empty_actions] * (max_len_game - len(replay['actions_list']))        
+        replay['actions_list'] = torch.tensor(replay['actions_list'])
+        actions_list.extend(replay['actions_list'])
+            
+        for locs in replay['locs_list']:
+            locs += [NOOP_LOC] * (max_len_actions - len(locs))
+        replay['locs_list'] += [empty_locs] * (max_len_game - len(replay['locs_list']))        
+        replay['locs_list'] = torch.tensor(replay['locs_list'])
+        locs_list.extend(replay['locs_list'])
+
+    state_list = torch.stack(state_list, axis=0)
+    env_list = torch.stack(env_list, axis=0)
+    actions_list = torch.stack(actions_list, axis=0)
+    locs_list = torch.stack(locs_list, axis=0)
+    
+    new_batch =  {'state_list': state_list, 'env_list': env_list, 'actions_list': actions_list, 'locs_list': locs_list}    
+    return new_batch
+
+
+def test_dataset():
+    filename_list = get_all_filenames('/home/wllmzhu/Documents/Github/C1GamesStarterKit/data/competitions')
+    dataset = Terminal_Replay_Dataset(filename_list, max_seq_len=50, with_events=False)
+    temp = dataset[0]
+    #print(temp['actions_list'][0][0])
+    pass
+
+def test_dataloader():
+    filename_list = get_all_filenames('/home/wllmzhu/Documents/Github/C1GamesStarterKit/data/competitions')
+    dataset = Terminal_Replay_Dataset(filename_list, max_seq_len=50, with_events=False)
+    dataloader = DataLoader(dataset, batch_size=4, shuffle=False, num_workers=0, collate_fn=Terminal_Replay_Collate)
+    it = iter(dataloader)
+    hi = next(it)
+    #print(hi['state_list'].shape)
 
 if __name__ == '__main__':
-    test()
+    test_dataset()
+    test_dataloader()
