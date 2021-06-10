@@ -5,14 +5,14 @@ import torch.nn.functional as F
 class SpatialEncoder(nn.Module):
     def __init__(self): 
         super().__init__()
-        self.conv1 = nn.Conv2d(8, 16, 3)
+        self.conv1 = nn.Conv2d(11, 16, 3)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(16, 32, 3)
         self.fc1 = nn.Linear(32 * 5 * 5, 512)
         self.fc2 = nn.Linear(512, 224)
 
     def forward(self, x):
-        # (N, 8, 28, 28)
+        # (N, 11, 28, 28)
         # (N, 16, 13, 13)
         x = self.pool(F.relu(self.conv1(x)))
         # (N, 32, 5, 5)
@@ -24,7 +24,7 @@ class SpatialEncoder(nn.Module):
         return x
 
 class ScalarEncoder(nn.Module):
-    def __init__(self, scalar_features_dim=7):
+    def __init__(self, scalar_features_dim=8):
         super().__init__()
         self.fc1 = nn.Linear(scalar_features_dim, 64)
         self.fc2 = nn.Linear(64, 32)

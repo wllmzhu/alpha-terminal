@@ -59,7 +59,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         """
         gamelib.debug_write('Configuring your custom algo strategy...')
         self.config = config
-        global WALL, SUPPORT, TURRET, SCOUT, DEMOLISHER, INTERCEPTOR, MP, SP, STRUCTURE_ONEHOT
+        global WALL, SUPPORT, TURRET, SCOUT, DEMOLISHER, INTERCEPTOR, MP, SP
         WALL = config["unitInformation"][0]["shorthand"]
         SUPPORT = config["unitInformation"][1]["shorthand"]
         TURRET = config["unitInformation"][2]["shorthand"]
@@ -68,7 +68,6 @@ class AlgoStrategy(gamelib.AlgoCore):
         INTERCEPTOR = config["unitInformation"][5]["shorthand"]
         MP = 1
         SP = 0
-        STRUCTURE_ONEHOT = {WALL: [1, 0, 0], SUPPORT: [0, 1, 0], TURRET: [0, 0, 1]}
         # This is a good place to do initial setup
         self.scored_on_locations = []
         
@@ -110,14 +109,22 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.policy_net_strategy(game_state)
         game_state.submit_turn()
 
+    def on_action_frame(self, action_frame_state):
+        game_state = gamelib.GameState(self.config, action_frame_state)
+        game_state.suppress_warnings(True) 
+
+        spatial_features, scalar_features = self.game_state_to_features(game_state, False)
+        observation_features = self.feature_encoder(spatial_features, scalar_features)
+        _, _, _, _, _, _, self.memory_state = self.policy(observation_features, game_state, self.memory_state)
+
     def policy_net_strategy(self, game_state):
         if self.is_learning:
             action_type_logps, location_logps = [], []
 
-        spatial_features, scalar_features = self.game_state_to_features(game_state)
-        observation_features = self.feature_encoder(spatial_features, scalar_features)
         action_type = None
         while action_type != constants.NOOP:
+            spatial_features, scalar_features = self.game_state_to_features(game_state, True)
+            observation_features = self.feature_encoder(spatial_features, scalar_features)
             action_type, _, action_type_logp, location, _, location_logp, self.memory_state \
                 = self.policy(observation_features, game_state, self.memory_state)
 
@@ -143,22 +150,28 @@ class AlgoStrategy(gamelib.AlgoCore):
             self.ep_location_logps.append(location_logps)
             
             
-    def game_state_to_features(self, game_state):
+    def game_state_to_features(self, game_state, is_deploy_phase):
         # spatial features
         spatial_features = deepcopy(game_state.game_map._GameMap__map)
         for x in range(len(spatial_features)):
             for y in range(len(spatial_features[x])):
-                if len(spatial_features[x][y]) > 0:
-                    unit = spatial_features[x][y][0]
-                    feature = []
-                    feature +=  STRUCTURE_ONEHOT[unit.unit_type]
-                    feature +=  [unit.health]
-                    feature +=  [unit.player_index==1, unit.player_index==2]
-                    feature +=  list(map(int, [unit.pending_removal, unit.upgraded]))
-                    # TODO: add features
-                    spatial_features[x][y] = feature
-                else:
-                    spatial_features[x][y] = [0] * 8
+                feature = [0] * 11
+                """
+                0: WALL count   1: SUPPORT count    2: TURRET count
+                3: SCOUT count  4: DEMOLISHER count 5: INTERCEPTOR count
+                6: mean health  7: pending removal  8: upgraded
+                9: is player 1 10: is player 2
+                """
+                for unit in spatial_features[x][y]:
+                    feature[constants.ACTION_SHORTHAND.index(unit.unit_type)-1] += 1
+                    feature[6] += unit.health
+                    feature[7] += int(unit.pending_removal)
+                    feature[8] += int(unit.upgraded)
+                    feature[9] =  unit.player_index == 1
+                    feature[10] = unit.player_index == 2
+                if len(spatial_features[x][y]) > 1:
+                    feature[6] /= len(spatial_features[x][y])
+                spatial_features[x][y] = feature
         spatial_features = torch.tensor(spatial_features, dtype=torch.float).to(self.device)
         spatial_features = spatial_features.permute(2, 0, 1)
         spatial_features = torch.unsqueeze(spatial_features, 0)
@@ -167,7 +180,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         # TODO: should data whitening be in model or here?
         scalar_features =   [game_state.my_health] + game_state.get_resources(0) 
         scalar_features +=  [game_state.enemy_health] + game_state.get_resources(1)
-        scalar_features +=  [game_state.turn_number] 
+        scalar_features +=  [game_state.turn_number, is_deploy_phase] 
         scalar_features = torch.tensor(scalar_features, dtype=torch.float).to(self.device)
         scalar_features = torch.unsqueeze(scalar_features, 0)
 
