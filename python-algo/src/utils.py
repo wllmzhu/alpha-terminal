@@ -51,7 +51,7 @@ class CheckpointManager:
         torch.save(optimizer.state_dict(), optimizer_path)
 
     def save_stats(self, stats_dict):
-        stats_path = os.path.join(self.checkpoint_path, str(self.next_id), 'stats.json')
+        stats_path = os.path.join(self.checkpoint_path, 'stats', f'{self.next_id}.json')
         with open(stats_path, 'w') as fp:
             json.dump(stats_dict, fp)
 
