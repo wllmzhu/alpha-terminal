@@ -140,8 +140,8 @@ class State2Seq(nn.Module):
         scalar_features = scalar_features.to(self.device)
         observation_features = self.encoder(spatial_features, scalar_features).to(self.device)
         
-        last_action = torch.tensor(9)
-        last_loc = torch.tensor([9, 9])
+        last_action = 9
+        last_loc = [0, 0]
         hidden_and_cell_states = (torch.zeros(1, 256), torch.zeros(1, 256))
         
         for t in range(1, num_actions):
