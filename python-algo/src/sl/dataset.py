@@ -355,6 +355,8 @@ def Terminal_Replay_Collate(batch):
     env_list = torch.stack(env_list, axis=0)
     actions_list = torch.stack(actions_list, axis=0)
     locs_list = torch.stack(locs_list, axis=0)
+
+    state_list = state_list.permute(0, 3, 1, 2)
     
     new_batch =  {'state_list': state_list, 'env_list': env_list, 'actions_list': actions_list, 'locs_list': locs_list}    
     return new_batch
@@ -373,7 +375,10 @@ def test_dataloader():
     dataloader = DataLoader(dataset, batch_size=4, shuffle=False, num_workers=0, collate_fn=Terminal_Replay_Collate)
     it = iter(dataloader)
     hi = next(it)
-    #print(hi['state_list'].shape)
+    print(hi['state_list'].shape)
+    print(hi['env_list'].shape)
+    print(hi['actions_list'].shape)
+    print(hi['locs_list'].shape)
 
 if __name__ == '__main__':
     test_dataset()
