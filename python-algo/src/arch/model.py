@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import random
 
 from .encoders import SpatialEncoder, ScalarEncoder
 from .action_heads import ActionTypeHead, LocationHead
@@ -15,7 +16,8 @@ class FeatureEncoder(nn.Module):
     def forward(self, spatial_features, scalar_features):
         latent_spatial = self.spatial_encoder(spatial_features)
         latent_scalar = self.scalar_encoder(scalar_features)
-        return torch.cat((latent_spatial, latent_scalar), -1) 
+        latent = torch.cat((latent_spatial, latent_scalar), -1) 
+        return latent
 
 class PolicyNet(nn.Module): 
     def __init__(self, device):
@@ -24,11 +26,17 @@ class PolicyNet(nn.Module):
         self.lstm = nn.LSTMCell(input_size=256, hidden_size=256)
         self.action_type_head = ActionTypeHead(device=device)
         self.location_head = LocationHead(device=device)
+        self.action_embed = nn.Linear(8, 16)
+        self.loc_embed = nn.Linear(2, 16)
         self.flush_queue_mask()
     
-    def forward(self, observation_feature, game_state, hidden_and_cell_states):
-        hidden_state, cell_state = self.lstm(observation_feature, hidden_and_cell_states)
-        
+    def forward(self, observation_feature, last_action, last_loc, game_state, hidden_and_cell_states):
+        last_action = self.action_embed(nn.functional.one_hot(last_action, 8))
+        last_loc = self.action_embed(last_loc)
+        lstm_input = torch.cat((observation_feature, last_action, last_loc), -1)
+
+        hidden_state, cell_state = self.lstm(lstm_input, hidden_and_cell_states)
+
         action_type_mask = get_action_type_mask(game_state, self.already_removing)
         action_type, action_type_logits, action_type_logp = self.action_type_head(hidden_state, action_type_mask)
         
@@ -86,3 +94,60 @@ def get_location_mask(game_state, action_type, already_removing):
         mask = [bool(game_state.contains_stationary_unit(loc)) for loc in constants.MY_LOCATIONS]
     mask = torch.tensor(mask)
     return mask
+
+
+class State2Seq(nn.Module):
+    def __init__(self, encoder, decoder, device):
+        super().__init__()
+        
+        self.encoder = encoder
+        self.decoder = decoder
+        self.device = device
+
+    def forward(self, spatial_features, scalar_features, target_action_seq, target_loc_seq, teacher_forcing_ratio = 0.5):
+        #spatial_features: (N, 8, 28, 28)
+        #scalar_features: (N, 7)
+        #target_action_seq: (N, num_actions)
+        #target_loc_seq: (N, num_actions, 2)
+
+        #teacher_forcing_ratio is probability to use teacher forcing
+        #e.g. if teacher_forcing_ratio is 0.75 we use ground-truth inputs 75% of the time
+        batch_size = spatial_features.shape[0]
+        num_actions = target_action_seq.shape[1]
+        
+        #tensor to store decoder outputs
+        action_seq = torch.zeros((num_actions, batch_size, 1))
+        loc_seq = torch.zeros((num_actions, batch_size, 2))
+        
+        #last hidden state of the encoder is used as the initial hidden state of the decoder
+        spatial_features = spatial_features.to(self.device)
+        scalar_features = scalar_features.to(self.device)
+        observation_features = self.encoder(spatial_features, scalar_features).to(self.device)
+        
+        last_action = torch.tensor(-1)
+        last_loc = torch.tensor([-1,-1])
+        hidden_and_cell_states = (torch.zeros(1, 256), torch.zeros(1, 256))
+        
+        for t in range(1, num_actions):
+            last_action = last_action.to(self.device)
+            last_loc = last_loc.to(self.device)
+            hidden_and_cell_states = (hidden_and_cell_states[0].to(self.device), hidden_and_cell_states[1].to(self.device))
+
+            #insert input token embedding, previous hidden and previous cell states
+            #receive output tensor (predictions) and new hidden and cell states
+            last_action, _, _, last_loc, _, _, hidden_and_cell_states = self.decoder(observation_features, last_action, last_loc, None, hidden_and_cell_states)
+            
+            #place predictions in a tensor holding predictions for each token
+            action_seq[t] = last_action
+            loc_seq[t] = last_loc
+            
+            #decide if we are going to use teacher forcing or not
+            teacher_force = random.random() < teacher_forcing_ratio
+            
+            #if teacher forcing, use actual next token as next input
+            #if not, use predicted token
+            if teacher_force:
+                last_action = target_action_seq[t]
+                last_loc = target_loc_seq[t]
+        
+        return action_seq, loc_seq
