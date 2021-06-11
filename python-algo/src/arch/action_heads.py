@@ -11,7 +11,7 @@ class ActionTypeHead(nn.Module):
         super().__init__()
         self.device = device
         self.fc1 = nn.Linear(256, 64)
-        self.fc2 = nn.Linear(64, 9)
+        self.fc2 = nn.Linear(64, 10)
 
     def forward(self, x, mask):
         x = F.relu(self.fc1(x))

@@ -6,6 +6,7 @@ import random
 from .encoders import SpatialEncoder, ScalarEncoder
 from .action_heads import ActionTypeHead, LocationHead
 from .. import constants
+from .. import gamelib
 
 class FeatureEncoder(nn.Module):
     def __init__(self):
@@ -22,17 +23,32 @@ class FeatureEncoder(nn.Module):
 class PolicyNet(nn.Module): 
     def __init__(self, device):
         super().__init__()
+        embed_dim = 16
         self.device = device
-        self.lstm = nn.LSTMCell(input_size=256, hidden_size=256)
+        self.lstm = nn.LSTMCell(input_size=256+embed_dim*2, hidden_size=256)
         self.action_type_head = ActionTypeHead(device=device)
         self.location_head = LocationHead(device=device)
-        self.action_embed = nn.Linear(8, 16)
-        self.loc_embed = nn.Linear(2, 16)
+        self.action_embed = nn.Linear(10, embed_dim)
+        self.loc_embed = nn.Linear(2, embed_dim)
         self.flush_queue_mask()
     
     def forward(self, observation_feature, last_action, last_loc, game_state, hidden_and_cell_states):
-        last_action = self.action_embed(nn.functional.one_hot(last_action, 8))
-        last_loc = self.action_embed(last_loc)
+        last_action = torch.tensor(last_action)
+        last_loc = torch.tensor(last_loc)
+
+        last_action = nn.functional.one_hot(last_action, 10).float()
+        last_action = self.action_embed(last_action)
+        last_action = torch.unsqueeze(last_action, 0)
+        last_loc = last_loc.float()
+        last_loc = self.loc_embed(last_loc)
+        last_loc = torch.unsqueeze(last_loc, 0)
+
+        # gamelib.debug_write('=========================================================')
+        # gamelib.debug_write(last_action.shape)
+        # gamelib.debug_write(last_loc.shape)
+        # gamelib.debug_write(observation_feature.shape)
+        # gamelib.debug_write('=========================================================')        
+
         lstm_input = torch.cat((observation_feature, last_action, last_loc), -1)
 
         hidden_state, cell_state = self.lstm(lstm_input, hidden_and_cell_states)
@@ -65,9 +81,9 @@ def get_action_type_mask(game_state, already_removing):
     
     # NOTE: gamestate=None for SL
     if game_state is None:
-        return torch.tensor([True] * 9)
+        return torch.tensor([True] * 10)
 
-    mask = [True] * 9
+    mask = [True] * 10
     for unit in constants.STRUCTURES + constants.MOBILES:
         # affordable
         mask[unit] = mask[unit] and game_state.number_affordable(constants.ACTION_SHORTHAND[unit]) > 0
@@ -124,8 +140,8 @@ class State2Seq(nn.Module):
         scalar_features = scalar_features.to(self.device)
         observation_features = self.encoder(spatial_features, scalar_features).to(self.device)
         
-        last_action = torch.tensor(-1)
-        last_loc = torch.tensor([-1,-1])
+        last_action = torch.tensor(9)
+        last_loc = torch.tensor([9, 9])
         hidden_and_cell_states = (torch.zeros(1, 256), torch.zeros(1, 256))
         
         for t in range(1, num_actions):

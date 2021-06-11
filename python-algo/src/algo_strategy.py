@@ -116,8 +116,8 @@ class AlgoStrategy(gamelib.AlgoCore):
 
         spatial_features, scalar_features = self.game_state_to_features(game_state)
         observation_features = self.feature_encoder(spatial_features, scalar_features)
-        action_type = torch.tensor(-1)
-        location = torch.tensor([-1,-1])
+        action_type = torch.tensor(9)
+        location = torch.tensor([0,0])
         while action_type != constants.NOOP:
             action_type, _, action_type_logp, location, _, location_logp, self.memory_state \
                 = self.policy(observation_features, action_type, location, game_state, self.memory_state)
