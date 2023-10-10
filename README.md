@@ -1,65 +1,31 @@
-# C1GamesStarterKit
+# Alpha-Terminal
 
-Welcome to the C1 Terminal Starter Kit! The repository contains a collection of scripts and 
-language-specific starter algos, to help you start your journey to develop the ultimate algo.
+A self-contained framework to train and deploy Reinforcement Learning (Policy Gradient) agents to play the game of [Terminal](https://terminal.c1games.com/), developed on top of the [starter kit](https://github.com/correlation-one/C1GamesStarterKit). 
 
-For more details about competitions and the game itself please check out our
-[main site](https://terminal.c1games.com/rules).
+Read our [report](https://drive.google.com/file/d/10hCg3SpPaRgtiNvW73wukVeLP_rYjElo/view) of the final performance of the agent we trained (on a single CPU) that achieved strong amateur performance.
 
-## Manual Play
+<p align="center">
+    <img src="assets/demo.gif" width=200>
+</p>
 
-We recommend you familiarize yourself with the game and its strategic elements, by playing manually,
-before you start your algo. Check out [the playground](https://terminal.c1games.com/playground).
+# About the game: Terminal
 
-## Algo Development
+Terminal is a two-player zero-sum tower-defense game played on a 28-by-28 board. Each player begins the game with 30 Health Points. The goal is to reduce the opponent’s Health Points to 0 by strategically sending mobile units to achieve touchdowns on the opponent’s edges. In the meanwhile, the player needs to build defense structures to protect her own edge from the opponent’s touchdown.
 
-To test your algo locally, you should use the test_algo_[OS] scripts in the scripts folder. Details on its use is documented in the README.md file in the scripts folder.
+# Training
 
-For programming documentation of language specific algos, see each language specific README.
-For documentation of the game-config or the json format the engine uses to communicate the current game state, see json-docs.html
+Our architecture is inspired by the LSTM policy of [AlphaStar](https://www.deepmind.com/blog/alphastar-mastering-the-real-time-strategy-game-starcraft-ii), which enables the agent to output multiple actions per turn. The agent is trained using vanilla Policy Gradient.
 
-For advanced users you can install java and run the game engine locally. Java 10 or above is required: [Java Development Kit 10 or above](http://www.oracle.com/technetwork/java/javase/downloads/jdk10-downloads-4416644.html).
+To train the LSTM agent, run
+```bash
+python-algo/run_and_learn.sh
+```
 
-All code provided in the starterkit is meant to be used as a starting point, and can be overwritten completely by more advanced players to improve performance or provide additional utility.
+# Deployment
 
-## Windows Setup
+To run the agent locally, run
+```bash
+python-algo/run.sh
+```
 
-If you are running Windows, you will need Windows PowerShell installed. This comes pre-installed on Windows 10.
-Some windows users might need to run the following PowerShell commands in adminstrator mode (right-click the 
-PowerShell icon, and click "run as administrator"):
-    
-    `Set-ExecutionPolicy Unrestricted`
-    
-If this doesn't work try this:
-    
-    `Set-ExecutionPolicy Unrestricted CurrentUser`
-    
-If that still doesn't work, try these below:
-    
-    `Set-ExecutionPolicy Bypass`
-    `Set-ExecutionPolicy RemoteSigned`
-    
-And don't forget to run the PowerShell as admin.
-
-## Uploading Algos
-
-Simply select the folder of your algo when prompted on the [Terminal](https://terminal.c1games.com) website. Make sure to select the specific language folder such as "python-algo" do not select the entire starterkit itself.
-
-## Troubleshooting
-
-For detailed troubleshooting help related to both website problems and local development check out [the troubleshooting section](https://terminal.c1games.com/rules#Troubleshooting).
-
-#### Python Requirements
-
-Python algos require Python 3 to run. If you are running Unix (Mac OS or Linux), the command `python3` must run on 
-Bash or Terminal. If you are running Windows, the command `py -3` must run on PowerShell.
-   
-#### Java Requirements
-
-Java algos require the Java Development Kit. Java algos also require [Gradle]
-(https://gradle.org/install/) for compilation.
-   
-## Running Algos
-
-To run your algo locally or on our servers, or to enroll your algo in a competition, please see the [documentation 
-for the Terminal command line interface in the scripts directory](https://github.com/correlation-one/AIGamesStarterKit/tree/master/scripts)
+To see the agent play live, upload the `python-algo` folder to the [Terminal](https://terminal.c1games.com/) website.
