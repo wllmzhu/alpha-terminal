@@ -4,9 +4,8 @@ A self-contained framework to train and deploy Reinforcement Learning (Policy Gr
 
 Read our [report](https://drive.google.com/file/d/10hCg3SpPaRgtiNvW73wukVeLP_rYjElo/view) of the final performance of the agent we trained (on a single CPU) that achieved strong amateur performance.
 
-<p align="center">
-    <img src="assets/demo.gif" width=200>
-</p>
+![demo](https://github.com/wllmzhu/alpha-terminal/assets/52590858/a2c13540-cc8b-4ff3-918d-685961756ba7)
+
 
 # About the game: Terminal
 
